@@ -1,0 +1,29 @@
+name: ytb-read-mcp
+services:
+  mcp:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${YTB_PORT:-8001}:8001"
+    environment:
+      YTB_DATA_DIR: /data
+      STT_BASE_URL: ${STT_BASE_URL:-}
+      STT_API_KEY: ${STT_API_KEY:-}
+      STT_MODEL: ${STT_MODEL:-whisper-1}
+      YTB_PROXY: ${YTB_PROXY:-}
+    volumes:
+      - ytb_data:/data
+  worker:
+    build: .
+    restart: unless-stopped
+    command: ["ytb-read-mcp", "worker"]
+    environment:
+      YTB_DATA_DIR: /data
+      STT_BASE_URL: ${STT_BASE_URL:-}
+      STT_API_KEY: ${STT_API_KEY:-}
+      STT_MODEL: ${STT_MODEL:-whisper-1}
+      YTB_PROXY: ${YTB_PROXY:-}
+    volumes:
+      - ytb_data:/data
+volumes:
+  ytb_data:
