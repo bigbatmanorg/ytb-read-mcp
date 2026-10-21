@@ -1,4 +1,5 @@
 """Hardened, centrally configured yt-dlp adapter and compact YouTube discovery API."""
+
 from __future__ import annotations
 
 import re
@@ -80,7 +81,15 @@ def channel_url(value: str, tab: str = "videos") -> str:
 
 
 def _ydl_opts(cfg: Settings = settings, **extra: Any) -> dict[str, Any]:
-    opts: dict[str, Any] = {"quiet": True, "no_warnings": True, "skip_download": True, "noplaylist": True, "socket_timeout": 30, "retries": 2, "fragment_retries": 2}
+    opts: dict[str, Any] = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "noplaylist": True,
+        "socket_timeout": 30,
+        "retries": 2,
+        "fragment_retries": 2,
+    }
     if cfg.cookie_file:
         path = Path(cfg.cookie_file).expanduser()
         if not path.is_file():
@@ -95,6 +104,7 @@ def _ydl_opts(cfg: Settings = settings, **extra: Any) -> dict[str, Any]:
         # necessarily in the parent PATH. Use the official deno Python wheel.
         try:
             import deno
+
             deno_path = str(deno.find_deno_bin())
         except (ImportError, FileNotFoundError, RuntimeError):
             deno_path = shutil.which("deno")
@@ -122,12 +132,46 @@ def extract(target: str, *, cfg: Settings = settings, **opts: Any) -> dict[str, 
         return value
 
 
-def compact_entry(entry: dict[str, Any], *, include_description: bool = True, full: bool = False) -> dict[str, Any]:
-    keys = ["id", "title", "webpage_url", "channel", "channel_id", "channel_url", "uploader", "uploader_id", "duration", "view_count", "like_count", "comment_count", "upload_date", "timestamp", "release_timestamp", "live_status", "availability", "original_url"]
+def compact_entry(
+    entry: dict[str, Any], *, include_description: bool = True, full: bool = False
+) -> dict[str, Any]:
+    keys = [
+        "id",
+        "title",
+        "webpage_url",
+        "channel",
+        "channel_id",
+        "channel_url",
+        "uploader",
+        "uploader_id",
+        "duration",
+        "view_count",
+        "like_count",
+        "comment_count",
+        "upload_date",
+        "timestamp",
+        "release_timestamp",
+        "live_status",
+        "availability",
+        "original_url",
+    ]
     if include_description:
         keys.append("description")
     if full:
-        keys += ["tags", "categories", "chapters", "thumbnails", "language", "subtitles", "automatic_captions", "age_limit", "license", "thumbnail", "format_id", "resolution"]
+        keys += [
+            "tags",
+            "categories",
+            "chapters",
+            "thumbnails",
+            "language",
+            "subtitles",
+            "automatic_captions",
+            "age_limit",
+            "license",
+            "thumbnail",
+            "format_id",
+            "resolution",
+        ]
     result = {key: entry[key] for key in keys if entry.get(key) is not None}
     if result.get("id") and not result.get("webpage_url") and VIDEO_ID_RE.fullmatch(str(result["id"])):
         result["webpage_url"] = video_url(result["id"])
@@ -137,14 +181,30 @@ def compact_entry(entry: dict[str, Any], *, include_description: bool = True, fu
     if full:
         for track_type in ("subtitles", "automatic_captions"):
             if track_type in result:
-                result[track_type] = {lang: [dict(ext=v.get("ext"), name=v.get("name")) for v in variants if isinstance(v, dict)] for lang, variants in result[track_type].items()}
+                result[track_type] = {
+                    lang: [
+                        dict(ext=v.get("ext"), name=v.get("name")) for v in variants if isinstance(v, dict)
+                    ]
+                    for lang, variants in result[track_type].items()
+                }
     return result
 
 
 def _page(info: dict[str, Any], offset: int, limit: int) -> dict[str, Any]:
-    entries = [compact_entry(e, include_description=False) for e in (info.get("entries") or []) if isinstance(e, dict)]
+    entries = [
+        compact_entry(e, include_description=False)
+        for e in (info.get("entries") or [])
+        if isinstance(e, dict)
+    ]
     # yt-dlp usually returns exactly the requested playlist slice; some extractors ignore paging.
-    return {"entries": entries[:limit], "offset": offset, "limit": limit, "next_offset": offset + len(entries) if len(entries) >= limit else None, "has_more": len(entries) >= limit, "pagination_hint": "has_more indicates a possible next page; repeat with next_offset until entries are exhausted"}
+    return {
+        "entries": entries[:limit],
+        "offset": offset,
+        "limit": limit,
+        "next_offset": offset + len(entries) if len(entries) >= limit else None,
+        "has_more": len(entries) >= limit,
+        "pagination_hint": "has_more indicates a possible next page; repeat with next_offset until entries are exhausted",
+    }
 
 
 def search(query: str, limit: int = 10, offset: int = 0) -> list[dict[str, Any]]:
@@ -154,7 +214,11 @@ def search(query: str, limit: int = 10, offset: int = 0) -> list[dict[str, Any]]
     offset = max(0, min(int(offset), 200))
     count = offset + limit
     info = extract(f"ytsearch{count}:{query}", extract_flat=True, playlistend=count, noplaylist=False)
-    return [compact_entry(e, include_description=False) for e in (info.get("entries") or [])[offset:count] if isinstance(e, dict)]
+    return [
+        compact_entry(e, include_description=False)
+        for e in (info.get("entries") or [])[offset:count]
+        if isinstance(e, dict)
+    ]
 
 
 def video_info(video: str, full: bool = False) -> dict[str, Any]:
@@ -163,15 +227,39 @@ def video_info(video: str, full: bool = False) -> dict[str, Any]:
 
 def channel_info(channel: str) -> dict[str, Any]:
     info = extract(channel_url(channel), extract_flat=True, playlistend=1, noplaylist=False)
-    return {k: info.get(k) for k in ("id", "title", "description", "channel", "channel_id", "channel_url", "uploader", "uploader_id", "webpage_url") if info.get(k) is not None}
+    return {
+        k: info.get(k)
+        for k in (
+            "id",
+            "title",
+            "description",
+            "channel",
+            "channel_id",
+            "channel_url",
+            "uploader",
+            "uploader_id",
+            "webpage_url",
+        )
+        if info.get(k) is not None
+    }
 
 
-def channel_videos(channel: str, limit: int = 30, offset: int = 0, tab: str = "videos", *, paged: bool = False) -> Any:
+def channel_videos(
+    channel: str, limit: int = 30, offset: int = 0, tab: str = "videos", *, paged: bool = False
+) -> Any:
     limit, offset = max(1, min(int(limit), 100)), max(0, int(offset))
     target = channel_url(channel, tab)
-    info = extract(target, extract_flat=True, playliststart=offset+1, playlistend=offset+limit, noplaylist=False)
+    info = extract(
+        target, extract_flat=True, playliststart=offset + 1, playlistend=offset + limit, noplaylist=False
+    )
     page = _page(info, offset, limit)
-    page.update({"channel": info.get("channel") or info.get("title"), "channel_id": info.get("channel_id"), "tab": tab})
+    page.update(
+        {
+            "channel": info.get("channel") or info.get("title"),
+            "channel_id": info.get("channel_id"),
+            "tab": tab,
+        }
+    )
     return page if paged else page["entries"]
 
 
@@ -181,13 +269,28 @@ def channel_playlists(channel: str, limit: int = 30, offset: int = 0) -> dict[st
 
 def playlist_info(playlist: str, limit: int = 100, offset: int = 0) -> dict[str, Any]:
     limit, offset = max(1, min(int(limit), 250)), max(0, int(offset))
-    info = extract(playlist_url(playlist), extract_flat=True, playliststart=offset+1, playlistend=offset+limit, noplaylist=False)
-    return {"id": info.get("id"), "title": info.get("title"), "channel": info.get("channel") or info.get("uploader"), **_page(info, offset, limit)}
+    info = extract(
+        playlist_url(playlist),
+        extract_flat=True,
+        playliststart=offset + 1,
+        playlistend=offset + limit,
+        noplaylist=False,
+    )
+    return {
+        "id": info.get("id"),
+        "title": info.get("title"),
+        "channel": info.get("channel") or info.get("uploader"),
+        **_page(info, offset, limit),
+    }
 
 
 def comments(video: str, limit: int = 50) -> list[dict[str, Any]]:
     limit = max(1, min(int(limit), 200))
-    info = extract(video_url(video), getcomments=True, extractor_args={"youtube": {"max_comments": [str(limit), "all", "all", "0"]}})
+    info = extract(
+        video_url(video),
+        getcomments=True,
+        extractor_args={"youtube": {"max_comments": [str(limit), "all", "all", "0"]}},
+    )
     result = []
     for item in (info.get("comments") or [])[:limit]:
         if not isinstance(item, dict):
@@ -195,23 +298,65 @@ def comments(video: str, limit: int = 50) -> list[dict[str, Any]]:
         text = item.get("text")
         if isinstance(text, str) and len(text) > 4000:
             text = text[:4000] + "…"
-        result.append({"id": item.get("id"), "author": item.get("author"), "text": text, "like_count": item.get("like_count"), "timestamp": item.get("timestamp"), "parent": item.get("parent")})
+        result.append(
+            {
+                "id": item.get("id"),
+                "author": item.get("author"),
+                "text": text,
+                "like_count": item.get("like_count"),
+                "timestamp": item.get("timestamp"),
+                "parent": item.get("parent"),
+            }
+        )
     return result
 
 
 def subtitles(video: str) -> dict[str, Any]:
     info = extract(video_url(video))
+
     def tracks(name: str) -> dict[str, Any]:
-        return {lang: sorted(set(str(v.get("ext")) for v in variants if isinstance(v, dict) and v.get("ext"))) for lang, variants in (info.get(name) or {}).items()}
-    return {"video_id": normalize_video_id(video), "manual": tracks("subtitles"), "automatic": tracks("automatic_captions")}
+        return {
+            lang: sorted(set(str(v.get("ext")) for v in variants if isinstance(v, dict) and v.get("ext")))
+            for lang, variants in (info.get(name) or {}).items()
+        }
+
+    return {
+        "video_id": normalize_video_id(video),
+        "manual": tracks("subtitles"),
+        "automatic": tracks("automatic_captions"),
+    }
 
 
 def chapters(video: str) -> dict[str, Any]:
     info = extract(video_url(video))
-    return {"video_id": normalize_video_id(video), "chapters": [{k: x.get(k) for k in ("title", "start_time", "end_time") } for x in (info.get("chapters") or [])], "available": bool(info.get("chapters"))}
+    return {
+        "video_id": normalize_video_id(video),
+        "chapters": [
+            {k: x.get(k) for k in ("title", "start_time", "end_time")} for x in (info.get("chapters") or [])
+        ],
+        "available": bool(info.get("chapters")),
+    }
 
 
 def media_formats(video: str) -> dict[str, Any]:
     info = extract(video_url(video))
-    formats = [{k: x.get(k) for k in ("format_id", "ext", "width", "height", "fps", "vcodec", "acodec", "filesize", "filesize_approx", "tbr") if x.get(k) is not None} for x in (info.get("formats") or [])]
+    formats = [
+        {
+            k: x.get(k)
+            for k in (
+                "format_id",
+                "ext",
+                "width",
+                "height",
+                "fps",
+                "vcodec",
+                "acodec",
+                "filesize",
+                "filesize_approx",
+                "tbr",
+            )
+            if x.get(k) is not None
+        }
+        for x in (info.get("formats") or [])
+    ]
     return {"video_id": normalize_video_id(video), "formats": formats[:250], "truncated": len(formats) > 250}

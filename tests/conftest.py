@@ -4,6 +4,7 @@ When yt-dlp is installed, the REAL installed module is used. Otherwise a no-netw
 import shim permits deterministic pure-function tests only. This shim is not shipped
 in the installable package, and cannot be used to validate live yt-dlp behavior.
 """
+
 import importlib.util
 import sys
 import types

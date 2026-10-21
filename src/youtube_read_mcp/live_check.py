@@ -5,7 +5,7 @@ import os
 import re
 
 from .core import search, video_info
-from .transcript import prepare_transcript, search_record, load_record
+from .transcript import load_record, prepare_transcript, search_record
 
 
 def searchable_probe_term(segments: list[dict[str, object]]) -> str | None:

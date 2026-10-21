@@ -81,6 +81,11 @@ No config file required. Pass variables in the client's `env` object or export t
 
 When captions are missing and `STT_BASE_URL` is configured, the MCP downloads audio and calls the OpenAI-compatible `/audio/transcriptions` API. The API key is optional for local endpoints. STT is not silently required for normal usage. More variables are documented in [Configuration](docs/configuration.md).
 
+For deliberate re-transcription (for example, validating an STT provider when
+YouTube has automatic captions), pass `force_stt: true` to
+`youtube_prepare_transcript`. It bypasses caption tracks, requires configured
+STT, and maintains a separate cache provenance from caption-derived text.
+
 ## Testing and diagnostics
 
 ```bash
@@ -89,9 +94,12 @@ uv sync --extra dev
 uv run pytest -q                                 # deterministic test suite, no YouTube network calls
 uv run ytb-read-mcp doctor                       # local dependencies and storage diagnostics
 uv run ytb-read-mcp live-test                    # optional LIVE network test: may fail due to YouTube
+./scripts/test-live.sh                           # real stdio MCP + YouTube core evidence
+./scripts/test-live.sh --with-stt                # use ignored .env STT configuration
+./scripts/test-installed.sh                      # build wheel and run through isolated uvx
 ```
 
-For one-shot local verification run `./scripts/check.sh`. CI runs the offline suite on Python 3.12 and 3.13. **Offline unit/contract tests verify code deterministically, not whether YouTube is currently reachable**; the live test is explicitly separate.
+For one-shot local verification run `./scripts/check.sh`. Live reports go in `test-results/` and redact secrets. **Offline unit/contract tests verify code deterministically, not whether YouTube is currently reachable**; a core live pass does not claim media, worker, Docker, HTTP, or STT coverage.
 
 ## Tools
 

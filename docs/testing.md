@@ -1,5 +1,33 @@
 # Verification and release readiness
 
+## Test suites and evidence
+
+The suites are deliberately separate. Deterministic integration tests use only
+local temporary data; they are not evidence that YouTube or an STT provider is
+working. Live tests start a real stdio MCP subprocess and call tools through
+`fastmcp.Client`.
+
+```bash
+uv run pytest tests/integration -v
+./scripts/test-live.sh                 # core real MCP/YouTube verification
+./scripts/test-live.sh --with-stt      # sources local .env for a real STT test
+./scripts/test-installed.sh            # wheel through isolated uvx
+./scripts/test-full.sh
+```
+
+`test-live.sh` sources an ignored local `.env` when present, exports it only to
+the test server, and never includes keys, headers, cookie data, or signed URLs
+in its evidence. Each run writes `test-results/<UTC-run>/report.json`,
+`report.md`, JUnit XML, and redacted MCP-call evidence. A skipped optional STT
+test is `NOT_RUN`, not a passing advanced capability. `--with-stt` fails when
+the configured fixture has captions; set `YTB_TEST_STT_VIDEO` to a currently
+verified captionless public video before treating STT as verified.
+
+When a supplied test video has generated captions, the live STT suite uses the
+explicit `force_stt` MCP argument. This validates the same real download,
+chunking, backend request, persistence, and cache path while preserving the
+default caption-first behavior for regular users.
+
 ## Always run offline deterministic tests
 
 ```bash

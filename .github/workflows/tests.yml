@@ -19,3 +19,19 @@ jobs:
       - run: uv run pytest -q
       - run: uv run ytb-read-mcp test
       - run: uv run ytb-read-mcp doctor
+
+  live-core:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.13'
+      - run: uv sync --extra dev
+      - run: ./scripts/test-live.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-e2e-evidence
+          path: test-results/

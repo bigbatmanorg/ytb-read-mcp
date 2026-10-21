@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import html
 import hashlib
+import html
 import json
 import os
 import re
@@ -13,16 +13,14 @@ from typing import Any
 
 import httpx
 import yt_dlp
-from yt_dlp.version import __version__ as YTDLP_VERSION
 from filelock import FileLock
+from yt_dlp.version import __version__ as YTDLP_VERSION
 
 from .config import Settings, settings
-from .core import extract, normalize_video_id, video_url, _ydl_opts
+from .core import _ydl_opts, extract, normalize_video_id, video_url
 
 CACHE_SCHEMA_VERSION = 2
-TIMESTAMP_RE = re.compile(
-    r"(?P<h>\d{2}):(?P<m>\d{2}):(?P<s>\d{2})[.,](?P<ms>\d{3})"
-)
+TIMESTAMP_RE = re.compile(r"(?P<h>\d{2}):(?P<m>\d{2}):(?P<s>\d{2})[.,](?P<ms>\d{3})")
 TAG_RE = re.compile(r"<[^>]+>")
 
 
@@ -57,7 +55,9 @@ def parse_json3(raw: bytes | str) -> list[dict[str, Any]]:
     for event in data.get("events", []):
         if not isinstance(event, dict):
             continue
-        text = _clean_text("".join(str(seg.get("utf8", "")) for seg in event.get("segs", []) if isinstance(seg, dict)))
+        text = _clean_text(
+            "".join(str(seg.get("utf8", "")) for seg in event.get("segs", []) if isinstance(seg, dict))
+        )
         if not text:
             continue
         start = float(event.get("tStartMs") or 0) / 1000.0
@@ -104,12 +104,21 @@ def _dedupe_segments(segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not text or text == previous:
             continue
         previous = text
-        result.append({**({"timing": seg["timing"]} if "timing" in seg else {}), "start": round(float(seg["start"]), 3), "end": round(float(seg["end"]), 3), "text": text})
+        result.append(
+            {
+                **({"timing": seg["timing"]} if "timing" in seg else {}),
+                "start": round(float(seg["start"]), 3),
+                "end": round(float(seg["end"]), 3),
+                "text": text,
+            }
+        )
     return result
 
 
 def _lang_match(key: str, requested: str) -> bool:
-    return key.lower() == requested.lower() or key.split("-", 1)[0].lower() == requested.split("-", 1)[0].lower()
+    return (
+        key.lower() == requested.lower() or key.split("-", 1)[0].lower() == requested.split("-", 1)[0].lower()
+    )
 
 
 def track_candidates(
@@ -319,8 +328,7 @@ def manifest(record: dict[str, Any]) -> dict[str, Any]:
         "content_hash": record.get("content_hash"),
         "segment_count": len(record.get("segments", [])),
         "chunks": [
-            {k: chunk[k] for k in ("index", "start", "end", "chars")}
-            for chunk in record.get("chunks", [])
+            {k: chunk[k] for k in ("index", "start", "end", "chars")} for chunk in record.get("chunks", [])
         ],
     }
 
@@ -391,7 +399,16 @@ def _stt_one(path: Path, offset_seconds: float, cfg: Settings) -> list[dict[str,
         # Some OpenAI-compatible Whisper gateways only implement plain JSON.
         if exc.response.status_code not in {400, 404, 415, 422}:
             raise
-        payload = request("json")
+        try:
+            payload = request("json")
+        except httpx.HTTPStatusError as fallback_exc:
+            # Response bodies are capped and used only as a backend diagnostic;
+            # request headers and credentials are never included.
+            detail = fallback_exc.response.text.strip().replace("\n", " ")[:500]
+            raise RuntimeError(
+                f"STT backend rejected both verbose_json and json responses "
+                f"({fallback_exc.response.status_code}): {detail}"
+            ) from fallback_exc
 
     result: list[dict[str, Any]] = []
     for seg in payload.get("segments") or []:
@@ -406,9 +423,17 @@ def _stt_one(path: Path, offset_seconds: float, cfg: Settings) -> list[dict[str,
             # A plain text-only STT response does not provide word/sentence timing.
             # Use chunk boundaries as APPROXIMATE intervals; never invent exact points.
             import wave
+
             with wave.open(str(path), "rb") as wav:
                 chunk_duration = wav.getnframes() / float(wav.getframerate())
-            result.append({"start": offset_seconds, "end": offset_seconds + chunk_duration, "text": text, "timing": "chunk_approximate"})
+            result.append(
+                {
+                    "start": offset_seconds,
+                    "end": offset_seconds + chunk_duration,
+                    "text": text,
+                    "timing": "chunk_approximate",
+                }
+            )
     return result
 
 
@@ -428,6 +453,7 @@ def prepare_transcript(
     *,
     preferred_languages: list[str] | None = None,
     force_refresh: bool = False,
+    force_stt: bool = False,
     cfg: Settings = settings,
 ) -> dict[str, Any]:
     video_id = normalize_video_id(video)
@@ -438,12 +464,19 @@ def prepare_transcript(
         if not force_refresh and _is_fresh(cache_path, cfg):
             cached = load_record(video_id, cfg)
             cached_languages = list((cached.get("provenance") or {}).get("preferred_languages") or [])
-            if cached_languages == preferred:
+            if (
+                cached_languages == preferred
+                and bool((cached.get("provenance") or {}).get("force_stt")) == force_stt
+            ):
                 return manifest(cached)
 
         info = extract(video_url(video_id))
-        caption_candidates = track_candidates(
-            info.get("subtitles") or {}, info.get("automatic_captions") or {}, preferred
+        caption_candidates = (
+            []
+            if force_stt
+            else track_candidates(
+                info.get("subtitles") or {}, info.get("automatic_captions") or {}, preferred
+            )
         )
         segments: list[dict[str, Any]] = []
         language = "unknown"
@@ -475,7 +508,9 @@ def prepare_transcript(
                 segments = transcribe_with_stt(video_id, cfg)
                 source = "stt"
                 language = "unknown"  # STT backend did not provide verified language
-                provenance.update({"stt_model": cfg.stt_model, "stt_base_url": cfg.stt_base_url})
+                provenance.update(
+                    {"stt_model": cfg.stt_model, "stt_base_url": cfg.stt_base_url, "force_stt": force_stt}
+                )
             except Exception as exc:
                 errors.append(f"STT fallback failed: {type(exc).__name__}: {exc}")
 
@@ -488,7 +523,11 @@ def prepare_transcript(
                 "errors": errors,
             }
 
-        timing_quality = "stt_chunk_approximate" if any(x.get("timing") == "chunk_approximate" for x in segments) else ("stt_timed" if source == "stt" else "caption_timed")
+        timing_quality = (
+            "stt_chunk_approximate"
+            if any(x.get("timing") == "chunk_approximate" for x in segments)
+            else ("stt_timed" if source == "stt" else "caption_timed")
+        )
         chunks = build_chunks(
             segments,
             max_seconds=max(60, cfg.transcript_chunk_seconds),
