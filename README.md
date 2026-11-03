@@ -13,13 +13,13 @@ No YouTube API key, login, hosted database, or separate service is required for 
 **Run directly from GitHub, pinned to a release:**
 
 ```bash
-uvx --from git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.2.0 ytb-read-mcp
+uvx --from git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0 ytb-read-mcp
 ```
 
 **Install once:**
 
 ```bash
-uv tool install git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.2.0
+uv tool install git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0
 # if the uv tool binaries directory is not on PATH:
 uv tool update-shell
 ```
@@ -48,7 +48,7 @@ Use this JSON in any MCP client that can spawn stdio commands (e.g. Copilot, Cla
   "mcpServers": {
     "youtube": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.2.0", "ytb-read-mcp"]
+      "args": ["--from", "git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0", "ytb-read-mcp"]
     }
   }
 }
@@ -102,17 +102,26 @@ For one-shot local verification run `./scripts/check.sh`. Live reports go in `te
 
 ## Tools
 
-26 MCP tools organized by purpose:
+29 MCP tools organized by purpose:
 
 | Task | Tools |
 |---|---|
 | Discovery | `youtube_search`, `youtube_video_info`, `youtube_channel_info`, `youtube_channel_videos`, `youtube_channel_playlists`, `youtube_playlist_info`, `youtube_comments`, `youtube_video_chapters` |
+| Timeline | `youtube_transcript_outline`, `youtube_video_heatmap`, `youtube_sponsor_segments` |
 | Transcripts | `youtube_list_subtitles`, `youtube_prepare_transcript`, `youtube_transcript_manifest`, `youtube_transcript_read`, `youtube_transcript_search`, `youtube_transcripts_search`, `youtube_transcript_range`, `youtube_transcript_chunk`, `youtube_transcript_export` |
 | Media | `youtube_media_formats`, `youtube_download`, `youtube_extract_frames`, `youtube_extract_clip` |
 | Jobs | `youtube_batch_prepare`, `youtube_sync_source`, `youtube_job_status`, `youtube_job_cancel` |
 | Diagnostics | `youtube_health` |
 
 Tool descriptions contain usage instructions and are exposed through MCP. Three MCP prompts (`research_video`, `analyze_channel`, `analyze_video_visuals`) and cached resources are also provided. [Full usage guide](docs/tools.md).
+
+## Timelines, highlights and clean transcripts
+
+- **Clickable moments:** search hits, ranges, chapters, outline sections, heatmap peaks and frames include a `url` such as `https://youtu.be/ID?t=323`, so agents can cite moments that open at the right second.
+- **Outline:** `youtube_transcript_outline` groups the transcript by chapter (YouTube chapters or description timestamps, else fixed time windows) with word counts, reading time, previews and top terms.
+- **Stats:** `youtube_prepare_transcript` and `youtube_transcript_manifest` report word count, words per minute, reading minutes and caption coverage.
+- **Most replayed:** `youtube_video_heatmap` returns the most rewatched moments from YouTube's viewer heatmap, with what was said there.
+- **SponsorBlock:** `youtube_sponsor_segments` lists community-labelled sponsor reads, intros, outros and filler. The same categories can be passed as `exclude_categories` to `youtube_transcript_read`, `youtube_transcript_range` and the outline. Lookups send only a 4-character hash prefix of the video ID to [SponsorBlock](https://sponsor.ajay.app/) and are cached for 24 hours. Set `YTB_SPONSORBLOCK_API=""` to disable.
 
 ## Batch jobs (optional)
 

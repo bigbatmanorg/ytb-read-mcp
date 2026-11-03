@@ -23,6 +23,7 @@
 | `YTB_MAX_DOWNLOAD_MB` | `1024` | Upper bound for media downloads and STT audio downloads |
 | `YTB_MAX_DISK_MB` | `4096` | Guard against excessive cached media |
 | `YTB_WORKER_POLL_SECONDS` | `2` | Idle job-worker polling interval |
+| `YTB_SPONSORBLOCK_API` | `https://sponsor.ajay.app` | SponsorBlock API base; empty disables SponsorBlock tools and exclusions |
 
 ## Example local STT
 

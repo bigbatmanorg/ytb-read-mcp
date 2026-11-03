@@ -18,7 +18,7 @@ from filelock import FileLock
 from yt_dlp.version import __version__ as YTDLP_VERSION
 
 from .config import Settings, settings
-from .core import _ydl_opts, extract, normalize_video_id, video_url
+from .core import _ydl_opts, chapter_list, extract, normalize_video_id, timestamp_url, video_url
 
 CACHE_SCHEMA_VERSION = 2
 TIMESTAMP_RE = re.compile(r"(?P<h>\d{2}):(?P<m>\d{2}):(?P<s>\d{2})[.,](?P<ms>\d{3})")
@@ -240,6 +240,7 @@ def transcript_range(record: dict[str, Any], start_seconds: float, end_seconds: 
         "title": record.get("title"),
         "start_seconds": start_seconds,
         "end_seconds": end_seconds,
+        "url": timestamp_url(record["video_id"], start_seconds),
         "segments": segments,
         "text": text,
     }
@@ -272,6 +273,7 @@ def search_record(record: dict[str, Any], query: str, limit: int = 8) -> list[di
                 "score": score,
                 "start_seconds": float(window[0]["start"]),
                 "end_seconds": float(window[-1]["end"]),
+                "url": timestamp_url(record["video_id"], float(window[0]["start"])),
                 "text": " ".join(str(x["text"]) for x in window),
             }
         )
@@ -314,6 +316,32 @@ def load_record(video: str, cfg: Settings = settings) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+# Average silent reading speed for adults; used only for an approximate reading time.
+READING_WPM = 238
+WORD_RE = re.compile(r"\w+(?:['’-]\w+)*")
+
+
+def word_count(text: str) -> int:
+    return len(WORD_RE.findall(text))
+
+
+def transcript_stats(record: dict[str, Any]) -> dict[str, Any]:
+    """Size and pace of a prepared transcript, so agents can choose to read fully or skim."""
+    segments = record.get("segments", [])
+    words = sum(word_count(str(seg.get("text") or "")) for seg in segments)
+    spoken = float(segments[-1]["end"]) - float(segments[0]["start"]) if segments else 0.0
+    duration = record.get("duration_seconds")
+    covered = sum(max(0.0, float(seg["end"]) - float(seg["start"])) for seg in segments)
+    return {
+        "word_count": words,
+        "char_count": sum(len(str(seg.get("text") or "")) for seg in segments),
+        "spoken_seconds": round(spoken, 1),
+        "words_per_minute": round(words / (spoken / 60), 1) if spoken > 0 else None,
+        "reading_minutes": round(words / READING_WPM, 1),
+        "caption_coverage": round(min(1.0, covered / float(duration)), 3) if duration else None,
+    }
+
+
 def manifest(record: dict[str, Any]) -> dict[str, Any]:
     return {
         "available": True,
@@ -328,6 +356,8 @@ def manifest(record: dict[str, Any]) -> dict[str, Any]:
         "provenance": record.get("provenance"),
         "content_hash": record.get("content_hash"),
         "segment_count": len(record.get("segments", [])),
+        "stats": transcript_stats(record),
+        "has_chapters": bool(record.get("chapters")),
         "chunks": [
             {k: chunk[k] for k in ("index", "start", "end", "chars")} for chunk in record.get("chunks", [])
         ],
@@ -565,6 +595,13 @@ def prepare_transcript(
             },
             "segments": segments,
             "chunks": chunks,
+            # Kept with the transcript so outline and heatmap tools work from the cache.
+            "chapters": chapter_list(video_id, info.get("chapters")),
+            "heatmap": [
+                {k: point.get(k) for k in ("start_time", "end_time", "value")}
+                for point in (info.get("heatmap") or [])
+                if isinstance(point, dict)
+            ],
         }
         save_record(record, cfg)
         return manifest(record)

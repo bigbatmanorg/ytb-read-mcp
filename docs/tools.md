@@ -27,6 +27,13 @@ The MCP server advertises detailed docstrings as tool descriptions, tool paramet
 
 Call `youtube_channel_videos(channel_url,tab="videos")`, then repeat for `shorts` or `streams`. Paginate with `next_offset`; pages may be shorter than expected, and the total is not authoritative. `youtube_channel_playlists` lists playlists, then `youtube_playlist_info` pages through their video IDs.
 
+### Timeline, highlights and summaries
+
+1. `youtube_prepare_transcript(video)`; check `stats` (word count, reading minutes) to decide between reading everything and skimming.
+2. `youtube_transcript_outline(video, exclude_categories=["sponsor","selfpromo","intro","outro"])` gives chapter sections with previews and links; summarise per section and cite each section's `url`.
+3. `youtube_video_heatmap(video)` shows what viewers rewatch most; combine its peaks with the outline for "best moments".
+4. Read full sections with `youtube_transcript_range` (same `exclude_categories`) when a preview is not enough.
+
 ### Frame-based visual analysis
 
 Call `youtube_video_chapters` or search a transcript to find relevant times. Then call `youtube_extract_frames(video,timestamps=[120,365,750],width=640)`. The tool returns local JPG paths; have your calling vision-capable agent open/analyze those images. Never imply that frame extraction itself interprets images.

@@ -51,6 +51,11 @@ def video_url(value: str) -> str:
     return f"https://www.youtube.com/watch?v={normalize_video_id(value)}"
 
 
+def timestamp_url(video: str, seconds: float) -> str:
+    """Clickable link that starts playback at `seconds`, for citing a moment."""
+    return f"https://youtu.be/{normalize_video_id(video)}?t={max(0, int(seconds))}"
+
+
 def playlist_url(value: str) -> str:
     value = value.strip()
     if value.startswith("https://"):
@@ -328,13 +333,25 @@ def subtitles(video: str) -> dict[str, Any]:
     }
 
 
+def chapter_list(video: str, raw: Any) -> list[dict[str, Any]]:
+    """Normalize yt-dlp chapters (YouTube chapters or description timestamps) with links."""
+    return [
+        {
+            "title": x.get("title"),
+            "start_time": x.get("start_time"),
+            "end_time": x.get("end_time"),
+            "url": timestamp_url(video, float(x.get("start_time") or 0)),
+        }
+        for x in (raw or [])
+        if isinstance(x, dict)
+    ]
+
+
 def chapters(video: str) -> dict[str, Any]:
     info = extract(video_url(video))
     return {
         "video_id": normalize_video_id(video),
-        "chapters": [
-            {k: x.get(k) for k in ("title", "start_time", "end_time")} for x in (info.get("chapters") or [])
-        ],
+        "chapters": chapter_list(video, info.get("chapters")),
         "available": bool(info.get("chapters")),
     }
 

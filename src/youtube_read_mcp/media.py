@@ -12,7 +12,7 @@ from typing import Any
 import yt_dlp
 
 from .config import Settings, settings
-from .core import _ydl_opts, extract, normalize_video_id, video_url
+from .core import _ydl_opts, extract, normalize_video_id, timestamp_url, video_url
 
 
 def _require_ffmpeg() -> str:
@@ -135,7 +135,7 @@ def extract_frames(
     for t in timestamps:
         path = target / f"frame-{int(t * 1000):012d}-{width}.jpg"
         if path.is_file():
-            output.append({"timestamp": t, "path": str(path), "cached": True})
+            output.append({"timestamp": t, "url": timestamp_url(video, t), "path": str(path), "cached": True})
             continue
         with tempfile.TemporaryDirectory(dir=cfg.temp_dir) as temporary:
             staging = Path(temporary) / "frame.jpg"
@@ -182,7 +182,7 @@ def extract_frames(
             if not staging.exists() or not staging.stat().st_size:
                 raise RuntimeError(f"Frame extraction produced no output; remote error: {failure}")
             os.replace(staging, path)
-        output.append({"timestamp": t, "path": str(path), "cached": False})
+        output.append({"timestamp": t, "url": timestamp_url(video, t), "path": str(path), "cached": False})
     return {"video_id": normalize_video_id(video), "frames": output, "count": len(output)}
 
 

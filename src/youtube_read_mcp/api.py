@@ -7,12 +7,18 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from . import core, storage, transcript
+from . import core, insights, storage, transcript
 from .config import Settings, settings
 
 
 def read_transcript(
-    video: str, cursor: int = 0, max_chars: int = 12000, format: str = "segments", *, cfg: Settings = settings
+    video: str,
+    cursor: int = 0,
+    max_chars: int = 12000,
+    format: str = "segments",
+    exclude_categories: list[str] | None = None,
+    *,
+    cfg: Settings = settings,
 ) -> dict[str, Any]:
     if format not in {"segments", "text"}:
         raise ValueError("format must be segments or text")
@@ -21,10 +27,14 @@ def read_transcript(
     segs = record.get("segments", [])
     if not 0 <= cursor <= len(segs):
         raise ValueError("Invalid transcript cursor")
+    skipped = insights.excluded_indexes(record, exclude_categories, cfg=cfg)
     selected: list[dict[str, Any]] = []
     chars = 0
     end = cursor
     while end < len(segs):
+        if end in skipped:
+            end += 1
+            continue
         next_seg = segs[end]
         length = len(str(next_seg.get("text") or "")) + 1
         if selected and chars + length > max_chars:
@@ -47,10 +57,28 @@ def read_transcript(
         "complete": end >= len(segs),
         "returned_segments": len(selected),
         "total_segments": len(segs),
+        "excluded_segments": len(skipped),
     }
     result["segments" if format == "segments" else "text"] = (
         selected if format == "segments" else " ".join(x["text"] for x in selected)
     )
+    return result
+
+
+def transcript_range(
+    video: str,
+    start_seconds: float,
+    end_seconds: float,
+    exclude_categories: list[str] | None = None,
+    *,
+    cfg: Settings = settings,
+) -> dict[str, Any]:
+    record = transcript.load_record(video, cfg)
+    skipped = insights.excluded_indexes(record, exclude_categories, cfg=cfg)
+    if skipped:
+        record = {**record, "segments": [s for i, s in enumerate(record["segments"]) if i not in skipped]}
+    result = transcript.transcript_range(record, start_seconds, end_seconds)
+    result["excluded_segments"] = len(skipped)
     return result
 
 

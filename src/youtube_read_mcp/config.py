@@ -47,6 +47,9 @@ class Settings:
     max_download_mb: int = field(default_factory=lambda: _int("YTB_MAX_DOWNLOAD_MB", 1024))
     max_disk_mb: int = field(default_factory=lambda: _int("YTB_MAX_DISK_MB", 4096))
     worker_poll_seconds: int = field(default_factory=lambda: _int("YTB_WORKER_POLL_SECONDS", 2))
+    sponsorblock_api: str = field(
+        default_factory=lambda: os.getenv("YTB_SPONSORBLOCK_API", "https://sponsor.ajay.app").rstrip("/")
+    )
 
     @property
     def transcript_dir(self) -> Path:

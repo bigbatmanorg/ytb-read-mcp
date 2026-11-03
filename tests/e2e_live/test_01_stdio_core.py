@@ -15,7 +15,7 @@ from .sources import SOURCES
 async def test_protocol_catalog_and_health(client, evidence):
     tools = await client.list_tools()
     names = [tool.name for tool in tools]
-    assert len(names) == len(set(names)) == 26
+    assert len(names) == len(set(names)) == 29
     assert all(tool.description and tool.input_schema.get("type") == "object" for tool in tools)
     prompts = await client.list_prompts()
     assert {"research_video", "analyze_channel", "analyze_video_visuals"} <= {p.name for p in prompts}
