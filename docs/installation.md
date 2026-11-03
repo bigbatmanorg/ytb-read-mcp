@@ -15,8 +15,8 @@
 uv sync
 uv run ytb-read-mcp
 
-# Once GitHub repo bigbatmanorg/ytb-read-mcp is published:
-uvx --from git+https://github.com/bigbatmanorg/ytb-read-mcp ytb-read-mcp
+# Directly from GitHub, pinned to a release:
+uvx --from git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.2.0 ytb-read-mcp
 
 # Install locally as a permanent uv tool:
 uv tool install .
@@ -32,7 +32,7 @@ Use direct installed binary in your MCP client's `command`. For running from Git
   "mcpServers": {
     "youtube": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/bigbatmanorg/ytb-read-mcp", "ytb-read-mcp"]
+      "args": ["--from", "git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.2.0", "ytb-read-mcp"]
     }
   }
 }

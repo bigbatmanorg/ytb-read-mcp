@@ -72,9 +72,9 @@ Do not inject JSON debug output into server stdout. To exercise an MCP call, use
 
 ## Release steps
 
-1. Run `./scripts/check.sh` with Python 3.12 and/or 3.13.
-2. Inspect the CLI help, `doctor`, and stdio MCP `tools/list`.
-3. Optionally run `live-test` on the target host and test STT/media separately if configured.
-4. Confirm there are no `.env` files, keys, cookie files or downloaded media in the git repository.
-5. Push to `bigbatmanorg/ytb-read-mcp`, then test the documented `uvx --from git+...` command.
-6. Tag a release and pin a tag/commit in production client configs if you require reproducible deployments.
+1. Bump the version in `pyproject.toml` and `src/youtube_read_mcp/__init__.py`, update the pinned tag in `README.md` and `docs/installation.md`, and add a `CHANGELOG.md` entry.
+2. Run `./scripts/check.sh` and `./scripts/test-installed.sh`.
+3. Run `./scripts/test-live.sh --with-media --with-jobs --with-http` (add `--with-stt` when an STT backend is configured) and update `tests/e2e_live/COVERAGE.md` with the result.
+4. Confirm there are no `.env` files, keys, cookie files, test results or downloaded media in the git repository.
+5. Merge to `main`, tag `vX.Y.Z` on the merge commit and publish a GitHub release with the changelog entry.
+6. Verify the pinned `uvx --from git+https://github.com/bigbatmanorg/ytb-read-mcp@vX.Y.Z ytb-read-mcp doctor` command.
