@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import socket
 import sys
 from pathlib import Path
@@ -63,6 +64,17 @@ async def test_real_worker_jobs_sync_and_cancel(client, evidence):
         await _worker_once(evidence["data_dir"])
     completed = await call(client, evidence, "youtube_job_status", {"job_id": job["id"]})
     assert completed["state"] in {"completed", "partial"} and completed["completed"] >= 1
+    # Worker-prepared transcripts must be in the cross-video FTS index, not only cached.
+    done = next(item["video_id"] for item in completed["items"] if item["state"] == "completed")
+    page = await call(client, evidence, "youtube_transcript_read", {"video": done, "max_chars": 2000})
+    term = next(
+        word
+        for segment in page["segments"]
+        for word in re.findall(r"\w{4,}", segment["text"])
+        if not word.isdigit()
+    )
+    indexed = await call(client, evidence, "youtube_transcripts_search", {"query": term, "video": done})
+    assert indexed["count"] >= 1, f"batch transcript {done} was not indexed"
 
     recovery = await call(client, evidence, "youtube_batch_prepare", {"videos": videos})
     await _worker_restart_recovery(evidence["data_dir"], len(videos))

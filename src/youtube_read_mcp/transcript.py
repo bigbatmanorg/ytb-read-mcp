@@ -336,12 +336,20 @@ def manifest(record: dict[str, Any]) -> dict[str, Any]:
 
 def _download_audio(video_id: str, workdir: Path, cfg: Settings = settings) -> Path:
     template = str(workdir / "source.%(ext)s")
-    opts = _ydl_opts(cfg, skip_download=False, format="bestaudio/best", outtmpl=template, noplaylist=True)
+    opts = _ydl_opts(
+        cfg,
+        skip_download=False,
+        format="bestaudio/best",
+        outtmpl=template,
+        noplaylist=True,
+        max_filesize=max(1, cfg.max_download_mb) * 1024 * 1024,
+    )
     with yt_dlp.YoutubeDL(opts) as ydl:
         ydl.extract_info(video_url(video_id), download=True)
     files = [p for p in workdir.glob("source.*") if p.is_file()]
     if not files:
-        raise RuntimeError("yt-dlp did not produce an audio file")
+        # yt-dlp skips, rather than fails, downloads larger than max_filesize.
+        raise RuntimeError("yt-dlp did not produce an audio file (it may exceed YTB_MAX_DOWNLOAD_MB)")
     return max(files, key=lambda p: p.stat().st_mtime)
 
 
@@ -514,9 +522,9 @@ def prepare_transcript(
                 segments = transcribe_with_stt(video_id, cfg)
                 source = "stt"
                 language = "unknown"  # STT backend did not provide verified language
-                provenance.update(
-                    {"stt_model": cfg.stt_model, "stt_base_url": cfg.stt_base_url, "force_stt": force_stt}
-                )
+                # The backend URL is deliberately not recorded: manifests are returned to MCP
+                # clients and the URL may name internal hosts or embed credentials.
+                provenance.update({"stt_model": cfg.stt_model, "force_stt": force_stt})
             except Exception as exc:
                 errors.append(f"STT fallback failed: {type(exc).__name__}: {exc}")
 

@@ -26,3 +26,16 @@ async def test_agent_prompts_registered():
     async with fastmcp.Client(mcp) as client:
         prompts = await client.list_prompts()
         assert {"research_video", "analyze_channel", "analyze_video_visuals"} <= {x.name for x in prompts}
+
+
+@pytest.mark.asyncio
+async def test_every_tool_declares_annotations():
+    from youtube_read_mcp.server import mcp
+
+    async with fastmcp.Client(mcp) as client:
+        tools = {tool.name: tool for tool in await client.list_tools()}
+    for name, tool in tools.items():
+        assert tool.annotations is not None, name
+        assert tool.annotations.read_only_hint is not None, name
+    assert tools["youtube_search"].annotations.read_only_hint is True
+    assert tools["youtube_job_cancel"].annotations.destructive_hint is True
