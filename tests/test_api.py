@@ -115,3 +115,42 @@ def test_timing_quality_is_preserved():
         [{"start": 0, "end": 10, "text": "test", "timing": "chunk_approximate"}]
     )
     assert segs[0]["timing"] == "chunk_approximate"
+
+
+def test_unicode_and_percent_encoded_handles():
+    expected = "https://www.youtube.com/@%E6%97%A5%E6%9C%AC%E8%AA%9E/videos"
+    assert core.channel_url("https://www.youtube.com/@日本語") == expected
+    assert core.channel_url("https://www.youtube.com/@%E6%97%A5%E6%9C%AC%E8%AA%9E/videos") == expected
+    with pytest.raises(ValueError):
+        core.channel_url("https://www.youtube.com/@bad%2Fhandle")
+
+
+@pytest.mark.parametrize("source", ["PLabc123456789", "https://www.youtube.com/playlist?list=PLabc123456789"])
+def test_sync_source_routes_playlists(monkeypatch, tmp_path, source):
+    cfg = Settings(data_dir=tmp_path)
+    page = {"entries": [{"id": VIDEO}], "next_offset": None, "has_more": False}
+    monkeypatch.setattr(core, "playlist_info", lambda *args: page)
+    monkeypatch.setattr(core, "channel_videos", lambda *a, **k: pytest.fail("routed to channel"))
+    assert api.sync_source(source, cfg=cfg)["new_video_ids"] == [VIDEO]
+
+
+def test_stt_offsets_use_real_chunk_lengths(monkeypatch, tmp_path):
+    import wave
+
+    def wav(name, seconds):
+        path = tmp_path / name
+        with wave.open(str(path), "wb") as out:
+            out.setnchannels(1)
+            out.setsampwidth(2)
+            out.setframerate(100)
+            out.writeframes(b"\0\0" * 100 * seconds)
+        return path
+
+    chunks = [wav("a.wav", 60), wav("b.wav", 7), wav("c.wav", 5)]
+    offsets = []
+    cfg = Settings(data_dir=tmp_path, stt_chunk_seconds=30)
+    monkeypatch.setattr(transcript, "_download_audio", lambda *args: tmp_path / "source.m4a")
+    monkeypatch.setattr(transcript, "_split_audio", lambda *args: chunks)
+    monkeypatch.setattr(transcript, "_stt_one", lambda path, offset, cfg: offsets.append(offset) or [])
+    transcript.transcribe_with_stt(VIDEO, cfg)
+    assert offsets == [0.0, 60.0, 67.0]

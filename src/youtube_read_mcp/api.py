@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from . import core, storage, transcript
 from .config import Settings, settings
@@ -109,7 +110,9 @@ def prepare(
 def sync_source(
     source: str, limit: int = 100, offset: int = 0, *, cfg: Settings = settings
 ) -> dict[str, Any]:
-    if source.startswith("https://") and "/playlist?" in source:
+    # Channels are only accepted as URLs, so anything else is treated as a bare playlist ID.
+    stripped = source.strip()
+    if not stripped.startswith("https://") or urlparse(stripped).path == "/playlist":
         data = core.playlist_info(source, limit, offset)
     else:
         data = core.channel_videos(source, limit, offset, paged=True)

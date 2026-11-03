@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import tempfile
+import wave
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -422,19 +423,20 @@ def _stt_one(path: Path, offset_seconds: float, cfg: Settings) -> list[dict[str,
         if text:
             # A plain text-only STT response does not provide word/sentence timing.
             # Use chunk boundaries as APPROXIMATE intervals; never invent exact points.
-            import wave
-
-            with wave.open(str(path), "rb") as wav:
-                chunk_duration = wav.getnframes() / float(wav.getframerate())
             result.append(
                 {
                     "start": offset_seconds,
-                    "end": offset_seconds + chunk_duration,
+                    "end": offset_seconds + _wav_seconds(path),
                     "text": text,
                     "timing": "chunk_approximate",
                 }
             )
     return result
+
+
+def _wav_seconds(path: Path) -> float:
+    with wave.open(str(path), "rb") as wav:
+        return wav.getnframes() / float(wav.getframerate())
 
 
 def transcribe_with_stt(video_id: str, cfg: Settings = settings) -> list[dict[str, Any]]:
@@ -443,8 +445,12 @@ def transcribe_with_stt(video_id: str, cfg: Settings = settings) -> list[dict[st
         source = _download_audio(video_id, workdir, cfg)
         chunks = _split_audio(source, workdir, cfg.stt_chunk_seconds)
         segments: list[dict[str, Any]] = []
-        for index, chunk in enumerate(chunks):
-            segments.extend(_stt_one(chunk, index * cfg.stt_chunk_seconds, cfg))
+        # Offsets come from each chunk's real length: _split_audio enforces a 60 s
+        # minimum and the final chunk is usually shorter than the configured size.
+        offset = 0.0
+        for chunk in chunks:
+            segments.extend(_stt_one(chunk, offset, cfg))
+            offset += _wav_seconds(chunk)
     return _dedupe_segments(segments)
 
 
