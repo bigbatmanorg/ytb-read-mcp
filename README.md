@@ -39,22 +39,346 @@ uv run ytb-read-mcp
 
 The executable also has the compatibility alias `youtube-read-mcp`. Releases are listed on the [releases page](https://github.com/bigbatmanorg/ytb-read-mcp/releases); changes are in [CHANGELOG.md](CHANGELOG.md).
 
-### MCP client configuration
+<!-- install:start -->
+## Install in your agent
 
-Use this JSON in any MCP client that can spawn stdio commands (e.g. Copilot, Claude Desktop, Docker Agent) with the client's appropriate configuration wrapper:
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_youtube-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=youtube&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22--from%22%2C%22git%2Bhttps%3A//github.com/bigbatmanorg/ytb-read-mcp%40v1.3.0%22%2C%22ytb-read-mcp%22%5D%7D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_youtube-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=youtube&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22--from%22%2C%22git%2Bhttps%3A//github.com/bigbatmanorg/ytb-read-mcp%40v1.3.0%22%2C%22ytb-read-mcp%22%5D%7D&quality=insiders)
+[![Install in Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en-US/install-mcp?name=youtube&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyItLWZyb20iLCJnaXQraHR0cHM6Ly9naXRodWIuY29tL2JpZ2JhdG1hbm9yZy95dGItcmVhZC1tY3BAdjEuMy4wIiwieXRiLXJlYWQtbWNwIl19)
+
+It works with any MCP client that can start a stdio command. It needs [uv](https://docs.astral.sh/uv/). `uvx` fetches the pinned release, so no clone or virtualenv is needed. Pick your agent below.
+
+No API key or configuration is needed. Optional speech-to-text and other settings are described in [Optional features by environment variable](#optional-features-by-environment-variable).
+
+
+<details>
+<summary><b>Claude Code</b></summary>
+
+```bash
+claude mcp add youtube -s user -- uvx --from git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0 ytb-read-mcp
+```
+
+</details>
+
+<details>
+<summary><b>Claude Desktop</b></summary>
+
+Settings → Developer → Edit Config (`claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "youtube": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0", "ytb-read-mcp"]
+      "args": [
+        "--from",
+        "git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0",
+        "ytb-read-mcp"
+      ]
     }
   }
 }
 ```
 
-If you installed it with `uv tool install`, simplify to `"command": "ytb-read-mcp"` and `"args": []`. Different clients may use `servers` instead of `mcpServers`; see their documentation. From a local checkout use `"command": "uv", "args": ["run", "--directory", "/absolute/path/ytb-read-mcp", "ytb-read-mcp"]`.
+</details>
+
+<details>
+<summary><b>VS Code / GitHub Copilot</b></summary>
+
+Use the button above, or add this to `.vscode/mcp.json` (workspace) or to the user `mcp.json` (command
+*MCP: Open User Configuration*):
+
+```json
+{
+  "servers": {
+    "youtube": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0",
+        "ytb-read-mcp"
+      ]
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Cursor</b></summary>
+
+Use the button above, or add this to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project):
+
+```json
+{
+  "mcpServers": {
+    "youtube": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0",
+        "ytb-read-mcp"
+      ]
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Windsurf</b></summary>
+
+Add this to `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "youtube": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0",
+        "ytb-read-mcp"
+      ]
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>OpenAI Codex CLI</b></summary>
+
+```bash
+codex mcp add youtube -- uvx --from git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0 ytb-read-mcp
+```
+
+Or add this to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.youtube]
+command = "uvx"
+args = ["--from", "git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0", "ytb-read-mcp"]
+```
+
+</details>
+
+<details>
+<summary><b>Gemini CLI</b></summary>
+
+Add this to `~/.gemini/settings.json` (or to `.gemini/settings.json` in a project):
+
+```json
+{
+  "mcpServers": {
+    "youtube": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0",
+        "ytb-read-mcp"
+      ]
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>DeepAgents</b></summary>
+
+**Deep Agents CLI:** add this to `~/.deepagents/.mcp.json` (all projects) or to `.mcp.json` in a project.
+
+```json
+{
+  "mcpServers": {
+    "youtube": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0",
+        "ytb-read-mcp"
+      ]
+    }
+  }
+}
+```
+
+**Python library** (`pip install deepagents langchain-mcp-adapters`):
+
+```python
+import asyncio
+import os
+
+from deepagents import create_deep_agent
+from langchain_mcp_adapters.client import MultiServerMCPClient
+
+client = MultiServerMCPClient({
+    "youtube": {
+        "transport": "stdio",
+        "command": "uvx",
+        "args": ["--from", "git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0", "ytb-read-mcp"],
+    }
+})
+
+
+async def main():
+    tools = await client.get_tools()
+    agent = create_deep_agent(model="anthropic:claude-sonnet-5-5", tools=tools)
+    result = await agent.ainvoke({"messages": [{"role": "user", "content": "What can you do?"}]})
+    print(result["messages"][-1].content)
+
+
+asyncio.run(main())
+```
+
+</details>
+
+<details>
+<summary><b>Docker Agent</b></summary>
+
+Save this as `agent.yaml`, then run `docker agent run agent.yaml`:
+
+```yaml
+agents:
+  root:
+    model: anthropic/claude-sonnet-5-5
+    description: Assistant with the youtube MCP tools
+    instruction: Use the youtube tools to answer the user's requests.
+    toolsets:
+      - type: mcp
+        command: uvx
+        args:
+          - "--from"
+          - "git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0"
+          - "ytb-read-mcp"
+```
+
+</details>
+
+<details>
+<summary><b>Hermes Agent</b></summary>
+
+Add this to `~/.hermes/config.yaml`, then run `/reload-mcp` in a chat:
+
+```yaml
+mcp_servers:
+  youtube:
+    command: uvx
+    args: ["--from", "git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0", "ytb-read-mcp"]
+```
+
+</details>
+
+<details>
+<summary><b>Cline / Roo Code / Kilo Code</b></summary>
+
+MCP Servers → Configure (`cline_mcp_settings.json` / `mcp_settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "youtube": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0",
+        "ytb-read-mcp"
+      ]
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Zed</b></summary>
+
+Add this to `settings.json`:
+
+```json
+{
+  "context_servers": {
+    "youtube": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0",
+        "ytb-read-mcp"
+      ]
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>opencode</b></summary>
+
+Add this to `opencode.json` (project) or `~/.config/opencode/opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "youtube": {
+      "type": "local",
+      "command": [
+        "uvx",
+        "--from",
+        "git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0",
+        "ytb-read-mcp"
+      ],
+      "enabled": true
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Goose</b></summary>
+
+Run `goose configure` → Add Extension → Command-line Extension, with the command `uvx --from git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0 ytb-read-mcp`. Or add this to
+`~/.config/goose/config.yaml`:
+
+```yaml
+extensions:
+  youtube:
+    type: stdio
+    enabled: true
+    cmd: uvx
+    args: ["--from", "git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0", "ytb-read-mcp"]
+```
+
+</details>
+
+<details>
+<summary><b>Other clients, a permanent install, a local checkout</b></summary>
+
+Most clients take the standard `mcpServers` JSON shown for Claude Desktop. Some use `servers` instead.
+
+To install once instead of fetching on each start:
+
+```bash
+uv tool install git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.3.0
+```
+
+then use `"command": "ytb-read-mcp"`, `"args": []`.
+
+From a checkout: `"command": "uv"`, `"args": ["run", "--directory", "/abs/path/ytb-read-mcp", "ytb-read-mcp"]`.
+
+</details>
+
+<!-- install:end -->
 
 Every tool declares MCP annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) so clients can decide which calls need confirmation.
 
