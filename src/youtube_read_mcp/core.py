@@ -6,7 +6,7 @@ import re
 import shutil
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import yt_dlp
 
@@ -67,7 +67,8 @@ def channel_url(value: str, tab: str = "videos") -> str:
     if tab not in {"videos", "shorts", "streams", "playlists"}:
         raise ValueError("tab must be videos, shorts, streams, or playlists")
     parsed = _url(value.strip())
-    parts = [x for x in parsed.path.split("/") if x]
+    # Non-Latin handles arrive either raw or percent-encoded; validate the decoded form.
+    parts = [unquote(x) for x in parsed.path.split("/") if x]
     if not parts or len(parts) > 3 or not (parts[0].startswith("@") or parts[0] in {"channel", "user", "c"}):
         raise ValueError("Expected YouTube channel, handle, or custom-channel URL")
     if parts[0] in {"channel", "user", "c"} and len(parts) < 2:
@@ -75,9 +76,9 @@ def channel_url(value: str, tab: str = "videos") -> str:
     base = parts[:1] if parts[0].startswith("@") else parts[:2]
     if parts[0] == "channel" and not CHANNEL_ID_RE.fullmatch(parts[1]):
         raise ValueError("Invalid channel ID")
-    if not all(re.fullmatch(r"[@A-Za-z0-9_.-]+", p) for p in base):
+    if not all(re.fullmatch(r"[@\w.·-]+", p) for p in base):
         raise ValueError("Invalid channel path")
-    return "https://www.youtube.com/" + "/".join(base) + "/" + tab
+    return "https://www.youtube.com/" + "/".join(quote(p, safe="@") for p in base) + "/" + tab
 
 
 def _ydl_opts(cfg: Settings = settings, **extra: Any) -> dict[str, Any]:

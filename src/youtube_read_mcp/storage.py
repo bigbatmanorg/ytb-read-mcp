@@ -29,9 +29,12 @@ def connection(cfg: Settings = settings) -> Iterator[sqlite3.Connection]:
     CREATE TABLE IF NOT EXISTS transcripts (video_id TEXT PRIMARY KEY, language TEXT NOT NULL, source TEXT NOT NULL, content_hash TEXT NOT NULL, indexed_at TEXT NOT NULL);
     CREATE VIRTUAL TABLE IF NOT EXISTS transcript_fts USING fts5(video_id UNINDEXED, start UNINDEXED, end UNINDEXED, content, tokenize='unicode61');
     CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, kind TEXT NOT NULL, state TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, cancel_requested INTEGER NOT NULL DEFAULT 0);
-    CREATE TABLE IF NOT EXISTS job_items (job_id TEXT NOT NULL, item_key TEXT NOT NULL, state TEXT NOT NULL, result TEXT, updated_at TEXT NOT NULL, PRIMARY KEY(job_id,item_key));
+    CREATE TABLE IF NOT EXISTS job_items (job_id TEXT NOT NULL, item_key TEXT NOT NULL, state TEXT NOT NULL, result TEXT, updated_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(job_id,item_key));
     CREATE TABLE IF NOT EXISTS source_sync (source TEXT PRIMARY KEY, ids TEXT NOT NULL, updated_at TEXT NOT NULL);
     """)
+    # Databases created by v1.1.0 lack the attempts column.
+    if "attempts" not in {row[1] for row in db.execute("PRAGMA table_info(job_items)")}:
+        db.execute("ALTER TABLE job_items ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
     try:
         with db:
             yield db
@@ -147,24 +150,65 @@ def cancel_job(job_id: str, cfg: Settings = settings) -> dict[str, Any]:
         db.execute("UPDATE jobs SET cancel_requested=1,updated_at=? WHERE id=?", (now(), job_id))
         db.execute("UPDATE job_items SET state='cancelled' WHERE job_id=? AND state='queued'", (job_id,))
         db.execute("UPDATE jobs SET state='cancelled' WHERE id=? AND state='queued'", (job_id,))
+        _finalize_job(db, job_id)
     return job_status(job_id, cfg)
 
 
-def run_job_once(cfg: Settings = settings, prepare=None) -> bool:
-    """Exactly one item. Safe to restart worker: running items can be reclaimed."""
-    from .transcript import prepare_transcript
+def _finalize_job(db: sqlite3.Connection, job_id: str) -> None:
+    """Set the job's terminal state once no item is queued or running."""
+    states = {x[0] for x in db.execute("SELECT state FROM job_items WHERE job_id=?", (job_id,))}
+    if not states or states.intersection({"queued", "running"}):
+        return
+    final = (
+        "partial"
+        if "failed" in states and "completed" in states
+        else ("failed" if "failed" in states else ("cancelled" if "cancelled" in states else "completed"))
+    )
+    db.execute("UPDATE jobs SET state=?,updated_at=? WHERE id=?", (final, now(), job_id))
 
-    prepare = prepare or (lambda vid: prepare_transcript(vid, cfg=cfg))
+
+MAX_ITEM_ATTEMPTS = 3
+
+
+def run_job_once(cfg: Settings = settings, prepare=None) -> bool:
+    """Exactly one item. Safe to restart worker: running items can be reclaimed.
+
+    The CLI worker holds a per-database lock, so an item still marked running when this
+    is called was abandoned by a worker that died while processing it.
+    """
+    if prepare is None:
+        # api.prepare also refreshes the FTS index used by youtube_transcripts_search.
+        from .api import prepare as prepare_and_index
+
+        prepare = lambda vid: prepare_and_index(vid, cfg=cfg)  # noqa: E731
     with connection(cfg) as db:
         db.execute("BEGIN IMMEDIATE")
+        abandoned = db.execute(
+            "SELECT DISTINCT i.job_id FROM job_items i JOIN jobs j ON j.id=i.job_id WHERE i.state='running' AND j.cancel_requested=1"
+        ).fetchall()
+        for (cancelled_job,) in abandoned:
+            db.execute(
+                "UPDATE job_items SET state='cancelled',updated_at=? WHERE job_id=? AND state='running'",
+                (now(), cancelled_job),
+            )
+            _finalize_job(db, cancelled_job)
         item = db.execute(
-            "SELECT j.id AS job_id,i.item_key FROM job_items i JOIN jobs j ON j.id=i.job_id WHERE i.state IN ('queued','running') AND j.cancel_requested=0 ORDER BY CASE i.state WHEN 'running' THEN 1 ELSE 0 END, j.created_at, i.rowid LIMIT 1"
+            "SELECT j.id AS job_id,i.item_key,i.state,i.attempts FROM job_items i JOIN jobs j ON j.id=i.job_id WHERE i.state IN ('queued','running') AND j.cancel_requested=0 ORDER BY CASE i.state WHEN 'running' THEN 1 ELSE 0 END, j.created_at, i.rowid LIMIT 1"
         ).fetchone()
         if not item:
             return False
         job_id, video = item["job_id"], item["item_key"]
+        if item["state"] == "running" and item["attempts"] >= MAX_ITEM_ATTEMPTS:
+            # Retrying an item that repeatedly kills the worker would block the queue forever.
+            error = {"error": f"worker stopped while processing this item {item['attempts']} times"}
+            db.execute(
+                "UPDATE job_items SET state='failed',result=?,updated_at=? WHERE job_id=? AND item_key=?",
+                (json.dumps(error), now(), job_id, video),
+            )
+            _finalize_job(db, job_id)
+            return True
         db.execute(
-            "UPDATE job_items SET state='running',updated_at=? WHERE job_id=? AND item_key=?",
+            "UPDATE job_items SET state='running',attempts=attempts+1,updated_at=? WHERE job_id=? AND item_key=?",
             (now(), job_id, video),
         )
         db.execute("UPDATE jobs SET state='running',updated_at=? WHERE id=?", (now(), job_id))
@@ -179,19 +223,7 @@ def run_job_once(cfg: Settings = settings, prepare=None) -> bool:
             "UPDATE job_items SET state=?,result=?,updated_at=? WHERE job_id=? AND item_key=?",
             (state, json.dumps(result, ensure_ascii=False), now(), job_id, video),
         )
-        pending = db.execute("SELECT state FROM job_items WHERE job_id=?", (job_id,)).fetchall()
-        states = {x[0] for x in pending}
-        if not states.intersection({"queued", "running"}):
-            final = (
-                "partial"
-                if "failed" in states and "completed" in states
-                else (
-                    "failed"
-                    if "failed" in states
-                    else ("cancelled" if "cancelled" in states else "completed")
-                )
-            )
-            db.execute("UPDATE jobs SET state=?,updated_at=? WHERE id=?", (final, now(), job_id))
+        _finalize_job(db, job_id)
     return True
 
 

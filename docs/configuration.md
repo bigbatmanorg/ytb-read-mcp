@@ -13,14 +13,14 @@
 | `STT_API_KEY` | unset | Optional token; never included in MCP results |
 | `STT_MODEL` | `whisper-1` | Model name passed to transcription API |
 | `STT_TIMEOUT_SECONDS` | `180` | Per STT request timeout |
-| `STT_CHUNK_SECONDS` | `900` | Audio split length (seconds) |
+| `STT_CHUNK_SECONDS` | `570` | Audio split length in seconds (minimum 60); keeps 16 kHz mono WAV chunks under common 25 MiB / 600 s STT limits |
 | `TRANSCRIPT_CHUNK_SECONDS` | `600` | Duration-based transcript chunking |
 | `TRANSCRIPT_MAX_CHARS` | `14000` | Char target for prepared chunks |
 | `TRANSCRIPT_CACHE_MAX_AGE_HOURS` | `0` | 0 = indefinite; otherwise refresh when old |
 | `YTB_COOKIE_FILE` | unset | Local Netscape cookies.txt path |
 | `YTB_PROXY` | unset | yt-dlp proxy URL |
 | `YTB_JS_RUNTIME` | `auto` | `auto`, `deno`, `node`, `quickjs`; auto picks installed runtime |
-| `YTB_MAX_DOWNLOAD_MB` | `1024` | Media download upper bound |
+| `YTB_MAX_DOWNLOAD_MB` | `1024` | Upper bound for media downloads and STT audio downloads |
 | `YTB_MAX_DISK_MB` | `4096` | Guard against excessive cached media |
 | `YTB_WORKER_POLL_SECONDS` | `2` | Idle job-worker polling interval |
 

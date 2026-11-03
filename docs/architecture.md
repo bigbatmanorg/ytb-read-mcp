@@ -3,7 +3,7 @@
 ## Design constraints
 
 - Library-centric Python implementation; FastMCP is a thin adapter.
-- stdio default; optional Streamable HTTP for authenticated local deployments.
+- stdio default; optional Streamable HTTP for local deployments (no built-in authentication).
 - No config, API key, daemon, database service or STT needed for normal single-video searches/captions.
 - sqlite3 metadata + FTS5; JSON transcript files; media artifacts in safe controlled root.
 - Media and transcript extraction use yt-dlp + optional FFmpeg; environment-configured STT fallback.
@@ -24,11 +24,11 @@
 
 Prepared transcript JSON is persisted per video ID (legacy-compatible path). Cache reuse considers the preferred language list and configured age limit. A record exposes the selected track source, language, content hash, timestamp quality, and schema version. Multiple language versions for one video are **not** retained simultaneously in v1.1; switching preferred languages refreshes the record.
 
-`transcripts_fts` is a SQLite FTS5 index built from the prepared record. It is replaced when a prepared transcript's content hash changes. Files remain the source of truth; restoring a backup may require calling `youtube_prepare_transcript` again to re-index older records.
+`transcript_fts` is a SQLite FTS5 index built from the prepared record. It is replaced when a prepared transcript's content hash changes. Files remain the source of truth; restoring a backup may require calling `youtube_prepare_transcript` again to re-index older records.
 
 ## Durable jobs
 
-`youtube_batch_prepare` persists jobs to SQLite. `ytb-read-mcp worker` acquires a single-worker FileLock and repeatedly processes queued items. A worker that dies mid-item leaves a `running` item which can be picked up after restarting the worker. No Redis/Celery is required. The worker cancellation request is cooperative and does not terminate already-running yt-dlp/FFmpeg subprocesses.
+`youtube_batch_prepare` persists jobs to SQLite. `ytb-read-mcp worker` acquires a single-worker FileLock and repeatedly processes queued items, indexing each prepared transcript for `youtube_transcripts_search`. A worker that dies mid-item leaves a `running` item which is retried after restarting the worker; an item that stops the worker three times is marked `failed`. Cancelling a job releases such items. No Redis/Celery is required. The worker cancellation request is cooperative and does not terminate already-running yt-dlp/FFmpeg subprocesses.
 
 Jobs are scoped to a data directory. The MCP process is not a supervisor; do not assume batch work survives the stdio client without a separate worker.
 

@@ -10,35 +10,34 @@ No YouTube API key, login, hosted database, or separate service is required for 
 
 ## 30-second start
 
-**Run directly from GitHub (after you publish the repository):**
+**Run directly from GitHub, pinned to a release:**
 
 ```bash
-uvx --from git+https://github.com/bigbatmanorg/ytb-read-mcp ytb-read-mcp
+uvx --from git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.2.0 ytb-read-mcp
 ```
 
 **Install once:**
 
 ```bash
-uv tool install git+https://github.com/bigbatmanorg/ytb-read-mcp
+uv tool install git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.2.0
 # if the uv tool binaries directory is not on PATH:
 uv tool update-shell
-
 ```
 
 ```bash
 ytb-read-mcp              # MCP server, stdio, no console chatter
 ```
 
-**Local checkout (recommended before GitHub publication):**
+**Local checkout:**
 
 ```bash
-unzip ytb-read-mcp.zip
+git clone https://github.com/bigbatmanorg/ytb-read-mcp
 cd ytb-read-mcp
 uv sync
 uv run ytb-read-mcp
 ```
 
-The executable also has the compatibility alias `youtube-read-mcp`.
+The executable also has the compatibility alias `youtube-read-mcp`. Releases are listed on the [releases page](https://github.com/bigbatmanorg/ytb-read-mcp/releases); changes are in [CHANGELOG.md](CHANGELOG.md).
 
 ### MCP client configuration
 
@@ -49,15 +48,15 @@ Use this JSON in any MCP client that can spawn stdio commands (e.g. Copilot, Cla
   "mcpServers": {
     "youtube": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/bigbatmanorg/ytb-read-mcp", "ytb-read-mcp"]
+      "args": ["--from", "git+https://github.com/bigbatmanorg/ytb-read-mcp@v1.2.0", "ytb-read-mcp"]
     }
   }
 }
 ```
 
-If you installed it with `uv tool install`, simplify to `"command": "ytb-read-mcp"` and `"args": []`. Different clients may use `servers` instead of `mcpServers`; see their documentation.
+If you installed it with `uv tool install`, simplify to `"command": "ytb-read-mcp"` and `"args": []`. Different clients may use `servers` instead of `mcpServers`; see their documentation. From a local checkout use `"command": "uv", "args": ["run", "--directory", "/absolute/path/ytb-read-mcp", "ytb-read-mcp"]`.
 
-**Before GitHub publication** this URL will not work unless the repository exists and contains this code. From a local checkout use `"command": "uv", "args": ["run", "--directory", "/absolute/path/ytb-read-mcp", "ytb-read-mcp"]` (or the installed absolute executable path).
+Every tool declares MCP annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) so clients can decide which calls need confirmation.
 
 ## Optional features by environment variable
 
