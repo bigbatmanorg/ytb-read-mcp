@@ -11,7 +11,7 @@ async def test_mcp_descriptions_and_health():
 
     async with fastmcp.Client(mcp) as client:
         tools = await client.list_tools()
-        assert len(tools) >= 26
+        assert len(tools) >= 29
         for tool in tools:
             assert len(tool.description or "") >= 65, tool.name
             assert tool.input_schema.get("type") == "object", tool.name

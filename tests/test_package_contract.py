@@ -34,5 +34,5 @@ def test_mcp_registration_names_and_docstrings():
             assert len(ast.get_docstring(node) or "") >= 65, node.name
             assert node.returns is not None, node.name
             items.append(node.name)
-    assert len(items) == 26
+    assert len(items) == 29
     assert len(set(items)) == len(items)

@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from .config import Settings, settings
-from .core import normalize_video_id
+from .core import normalize_video_id, timestamp_url
 
 
 def now() -> str:
@@ -86,7 +86,8 @@ def search_transcripts(
             f"SELECT video_id, start, end, snippet(transcript_fts, 3, '[', ']', '…', 18) AS excerpt, bm25(transcript_fts) AS rank FROM transcript_fts WHERE transcript_fts MATCH ? {where} ORDER BY rank LIMIT ?",
             args,
         ).fetchall()
-    return {"results": [dict(x) for x in rows], "count": len(rows), "search_mode": "lexical_fts5"}
+    results = [{**dict(x), "url": timestamp_url(x["video_id"], float(x["start"]))} for x in rows]
+    return {"results": results, "count": len(rows), "search_mode": "lexical_fts5"}
 
 
 def save_video(info: dict[str, Any], cfg: Settings = settings) -> None:

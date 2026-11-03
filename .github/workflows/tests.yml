@@ -16,7 +16,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: uv sync --extra dev
       - run: uv run python -m compileall -q src
-      - run: uv run pytest -q
+      - run: uv run pytest -q --ignore=tests/e2e_live
       - run: uv run ytb-read-mcp test
       - run: uv run ytb-read-mcp doctor
 

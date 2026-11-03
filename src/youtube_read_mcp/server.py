@@ -6,7 +6,7 @@ from typing import Any
 
 from fastmcp import FastMCP
 
-from . import api, core, media, storage, transcript
+from . import api, core, insights, media, storage, transcript
 
 mcp = FastMCP(
     "ytb-read-mcp",
@@ -139,18 +139,45 @@ def youtube_transcripts_search(query: str, limit: int = 10, video: str = "") -> 
     return storage.search_transcripts(query, limit, video)
 
 
-@mcp.tool(annotations=LOCAL_READ)
+# Read and range can consult SponsorBlock when exclude_categories is set, so they are open-world.
+@mcp.tool(annotations=YOUTUBE_READ)
 def youtube_transcript_read(
-    video: str, cursor: int = 0, max_chars: int = 12000, format: str = "segments"
+    video: str,
+    cursor: int = 0,
+    max_chars: int = 12000,
+    format: str = "segments",
+    exclude_categories: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Read a page from a PREPARED transcript. cursor is a zero-based segment index; repeat using next_cursor until complete=true. max_chars 500–30000; format 'segments' gives text+timestamps, 'text' concatenates prose. Never assume first page contains the entire transcript."""
-    return api.read_transcript(video, cursor, max_chars, format)
+    """Read a page from a PREPARED transcript. cursor is a zero-based segment index; repeat using next_cursor until complete=true. max_chars 500–30000; format 'segments' gives text+timestamps, 'text' concatenates prose. exclude_categories (e.g. ["sponsor","selfpromo","intro","outro"]) skips SponsorBlock-labelled segments. Never assume first page contains the entire transcript."""
+    return api.read_transcript(video, cursor, max_chars, format, exclude_categories)
 
 
-@mcp.tool(annotations=LOCAL_READ)
-def youtube_transcript_range(video: str, start_seconds: float, end_seconds: float) -> dict[str, Any]:
-    """Read time-bounded evidence from a PREPARED transcript. Use for targeted research after search or chapter inspection; start/end are video-relative seconds, up to a 2-hour window. STT timing_quality may be approximate."""
-    return transcript.transcript_range(transcript.load_record(video), start_seconds, end_seconds)
+@mcp.tool(annotations=YOUTUBE_READ)
+def youtube_transcript_range(
+    video: str, start_seconds: float, end_seconds: float, exclude_categories: list[str] | None = None
+) -> dict[str, Any]:
+    """Read time-bounded evidence from a PREPARED transcript, with a clickable url for the start. Use for targeted research after search or chapter inspection; start/end are video-relative seconds, up to a 2-hour window. exclude_categories skips SponsorBlock-labelled segments. STT timing_quality may be approximate."""
+    return api.transcript_range(video, start_seconds, end_seconds, exclude_categories)
+
+
+@mcp.tool(annotations=YOUTUBE_READ)
+def youtube_transcript_outline(
+    video: str, include_text: bool = False, exclude_categories: list[str] | None = None
+) -> dict[str, Any]:
+    """Outline a PREPARED transcript by chapter (YouTube chapters or description timestamps; fixed time windows when there are none). Each section has title, start/end, clickable url, word count, reading minutes and a preview (or full text with include_text=true). Also returns overall stats (words, words per minute, reading time) and top terms. Best first step for summaries and timelines."""
+    return insights.outline(video, include_text, exclude_categories)
+
+
+@mcp.tool(annotations=YOUTUBE_READ)
+def youtube_video_heatmap(video: str, top: int = 5) -> dict[str, Any]:
+    """Find the most replayed moments of a video from YouTube's viewer heatmap (only published for videos with enough views; returns available=false otherwise). Each peak has start/end seconds, relative intensity, a clickable url and, if the transcript is prepared, what was said there."""
+    return insights.heatmap_peaks(video, top)
+
+
+@mcp.tool(annotations=YOUTUBE_READ)
+def youtube_sponsor_segments(video: str, categories: list[str] | None = None) -> dict[str, Any]:
+    """List community-labelled SponsorBlock segments (sponsor, selfpromo, interaction, intro, outro, preview, music_offtopic, filler) with start/end and links. Queried by video-ID hash prefix and cached for 24 hours. Pass the same categories as exclude_categories to transcript tools for cleaner reading."""
+    return insights.sponsor_segments(video, categories)
 
 
 @mcp.tool(annotations=LOCAL_READ)
