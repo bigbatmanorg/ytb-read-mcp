@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -13,6 +14,7 @@ import httpx
 
 from . import core, transcript
 from .config import Settings, settings
+from .errors import YouTubeMCPError
 
 SPONSORBLOCK_CATEGORIES = (
     "sponsor",
@@ -25,6 +27,8 @@ SPONSORBLOCK_CATEGORIES = (
     "filler",
 )
 SPONSORBLOCK_CACHE_HOURS = 24
+SPONSORBLOCK_ATTEMPTS = 2
+SPONSORBLOCK_RETRY_DELAY = 1.0
 _STOPWORDS = set(
     """
     about above after again against also because been before being below between both could does doing
@@ -116,10 +120,30 @@ def heatmap_peaks(video: str, top: int = 5, *, cfg: Settings = settings) -> dict
 def _fetch_sponsorblock(video_id: str, cfg: Settings) -> list[dict[str, Any]]:
     # The hash-prefix endpoint avoids sending the exact video ID to the SponsorBlock server.
     prefix = hashlib.sha256(video_id.encode()).hexdigest()[:4]
-    with httpx.Client(timeout=20, headers={"User-Agent": "ytb-read-mcp"}) as client:
-        response = client.get(
-            f"{cfg.sponsorblock_api}/api/skipSegments/{prefix}",
-            params={"categories": json.dumps(list(SPONSORBLOCK_CATEGORIES)), "actionTypes": '["skip"]'},
+    response = None
+    failure = ""
+    # The public SponsorBlock API is occasionally overloaded; retry once before giving up.
+    for attempt in range(SPONSORBLOCK_ATTEMPTS):
+        if attempt:
+            time.sleep(SPONSORBLOCK_RETRY_DELAY)
+        try:
+            with httpx.Client(timeout=20, headers={"User-Agent": "ytb-read-mcp"}) as client:
+                response = client.get(
+                    f"{cfg.sponsorblock_api}/api/skipSegments/{prefix}",
+                    params={
+                        "categories": json.dumps(list(SPONSORBLOCK_CATEGORIES)),
+                        "actionTypes": '["skip"]',
+                    },
+                )
+        except httpx.TransportError as exc:
+            response, failure = None, f"{type(exc).__name__}"
+            continue
+        if response.status_code < 500:
+            break
+        failure = f"HTTP {response.status_code}"
+    if response is None or response.status_code >= 500:
+        raise YouTubeMCPError(
+            "SPONSORBLOCK_UNAVAILABLE", f"SponsorBlock did not respond ({failure})", retryable=True
         )
     if response.status_code == 404:
         return []
@@ -148,11 +172,19 @@ def sponsor_segments(
     fresh = cached and datetime.fromisoformat(cached["fetched_at"]) > datetime.now(UTC) - timedelta(
         hours=SPONSORBLOCK_CACHE_HOURS
     )
+    stale = False
     if not fresh:
-        cached = {"fetched_at": datetime.now(UTC).isoformat(), "segments": _fetch_sponsorblock(video_id, cfg)}
-        tmp = cache.with_suffix(".tmp")
-        tmp.write_text(json.dumps(cached), encoding="utf-8")
-        tmp.replace(cache)
+        try:
+            fetched = _fetch_sponsorblock(video_id, cfg)
+        except YouTubeMCPError:
+            if not cached:
+                raise
+            stale = True  # an outdated answer beats none while SponsorBlock is down
+        else:
+            cached = {"fetched_at": datetime.now(UTC).isoformat(), "segments": fetched}
+            tmp = cache.with_suffix(".tmp")
+            tmp.write_text(json.dumps(cached), encoding="utf-8")
+            tmp.replace(cache)
     segments = [
         {**seg, "url": core.timestamp_url(video_id, seg["start"])}
         for seg in cached["segments"]
@@ -164,21 +196,30 @@ def sponsor_segments(
         "excluded_seconds": round(sum(s["end"] - s["start"] for s in segments), 1),
         "source": "sponsorblock",
         "fetched_at": cached["fetched_at"],
+        "stale": stale,
     }
 
 
 def excluded_indexes(
     record: dict[str, Any], categories: list[str] | None, *, cfg: Settings = settings
-) -> set[int]:
-    """Transcript segment indexes whose midpoint lies inside an excluded SponsorBlock segment."""
+) -> tuple[set[int], str | None]:
+    """Transcript segment indexes whose midpoint lies inside an excluded SponsorBlock segment.
+
+    A SponsorBlock outage must not block reading the transcript itself, so it is reported as a
+    warning and nothing is excluded.
+    """
     if not categories:
-        return set()
-    spans = sponsor_segments(record["video_id"], categories, cfg=cfg)["segments"]
-    return {
+        return set(), None
+    try:
+        spans = sponsor_segments(record["video_id"], categories, cfg=cfg)["segments"]
+    except YouTubeMCPError as exc:
+        return set(), f"Nothing was excluded: {exc}"
+    indexes = {
         index
         for index, seg in enumerate(record.get("segments", []))
         if any(s["start"] <= (float(seg["start"]) + float(seg["end"])) / 2 < s["end"] for s in spans)
     }
+    return indexes, None
 
 
 def top_terms(texts: list[str], limit: int = 15) -> list[dict[str, Any]]:
@@ -213,7 +254,7 @@ def outline(
     else:
         source = "time_windows"
         sections = [(f"Part {c['index'] + 1}", float(c["start"]), c["end"]) for c in record.get("chunks", [])]
-    skipped = excluded_indexes(record, exclude_categories, cfg=cfg)
+    skipped, warning = excluded_indexes(record, exclude_categories, cfg=cfg)
     segments = [seg for i, seg in enumerate(record.get("segments", [])) if i not in skipped]
     result_sections = []
     for title, start, end in sections:
@@ -230,7 +271,7 @@ def outline(
         }
         section["text" if include_text else "preview"] = text if include_text else text[:240]
         result_sections.append(section)
-    return {
+    result = {
         "video_id": video_id,
         "title": record.get("title"),
         "source": source,
@@ -239,3 +280,6 @@ def outline(
         "stats": transcript.transcript_stats(record),
         "top_terms": top_terms([str(s["text"]) for s in segments]),
     }
+    if warning:
+        result["warnings"] = [warning]
+    return result

@@ -14,6 +14,8 @@
 ### Changed
 - Prepared transcript records now also store chapters and heatmap data.
 - `youtube_transcript_read` and `youtube_transcript_range` are annotated as open-world, because they can consult SponsorBlock.
+- SponsorBlock lookups retry once. If SponsorBlock stays unavailable, they fall back to the last cached result (`stale: true`), or else return a retryable `SPONSORBLOCK_UNAVAILABLE` error. Transcript reads with `exclude_categories` keep working and add a warning instead of failing.
+- The CI `deterministic` job no longer runs the live e2e tests, which need network access to YouTube and SponsorBlock.
 
 ## 1.2.0 — 2026-11-03
 

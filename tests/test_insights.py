@@ -6,8 +6,10 @@ import pytest
 
 from youtube_read_mcp import api, core, insights, storage, transcript
 from youtube_read_mcp.config import Settings
+from youtube_read_mcp.errors import YouTubeMCPError
 
 VIDEO = "dQw4w9WgXcQ"
+REAL_CLIENT = httpx.Client
 
 
 def seeded(tmp_path, **extra):
@@ -107,9 +109,8 @@ def _sponsorblock(monkeypatch, segments, calls):
         ]
         return httpx.Response(200, json=body)
 
-    real = httpx.Client
     monkeypatch.setattr(
-        insights.httpx, "Client", lambda **kw: real(transport=httpx.MockTransport(handler), **kw)
+        insights.httpx, "Client", lambda **kw: REAL_CLIENT(transport=httpx.MockTransport(handler), **kw)
     )
 
 
@@ -182,3 +183,58 @@ def test_outline_backfills_chapters_for_older_records(monkeypatch, tmp_path):
 def test_top_terms_ignore_caption_notation_and_filler():
     terms = insights.top_terms(["[Music] don’t even worry, the Valve steam deck [music] steam"])
     assert [t["term"] for t in terms] == ["steam", "worry", "valve", "deck"]
+
+
+def _flaky_sponsorblock(monkeypatch, statuses):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        status = statuses.pop(0) if statuses else 200
+        if status == "timeout":
+            raise httpx.ReadTimeout("slow", request=request)
+        if status != 200:
+            return httpx.Response(status, text="Upstream request timed out, please retry")
+        return httpx.Response(
+            200, json=[{"videoID": VIDEO, "segments": [{"category": "sponsor", "segment": [10, 19]}]}]
+        )
+
+    monkeypatch.setattr(
+        insights.httpx, "Client", lambda **kw: REAL_CLIENT(transport=httpx.MockTransport(handler), **kw)
+    )
+    monkeypatch.setattr(insights, "SPONSORBLOCK_RETRY_DELAY", 0)
+    return calls
+
+
+def test_sponsorblock_retries_once_after_overload(monkeypatch, tmp_path):
+    calls = _flaky_sponsorblock(monkeypatch, [504])
+    result = insights.sponsor_segments(VIDEO, cfg=Settings(data_dir=tmp_path))
+    assert len(calls) == 2 and len(result["segments"]) == 1 and result["stale"] is False
+
+
+def test_sponsorblock_outage_uses_stale_cache_or_reports_retryable_error(monkeypatch, tmp_path):
+    cfg = Settings(data_dir=tmp_path)
+    _flaky_sponsorblock(monkeypatch, ["timeout", 503])
+    with pytest.raises(YouTubeMCPError) as error:
+        insights.sponsor_segments(VIDEO, cfg=cfg)
+    assert error.value.code == "SPONSORBLOCK_UNAVAILABLE" and error.value.retryable
+    _flaky_sponsorblock(monkeypatch, [])
+    insights.sponsor_segments(VIDEO, cfg=cfg)
+    cache = transcript._cache_dir(VIDEO, cfg) / "sponsorblock.json"
+    cache.write_text(json.dumps({**json.loads(cache.read_text()), "fetched_at": "2000-01-01T00:00:00+00:00"}))
+    _flaky_sponsorblock(monkeypatch, [503, 503])
+    stale = insights.sponsor_segments(VIDEO, cfg=cfg)
+    assert stale["stale"] is True and len(stale["segments"]) == 1
+
+
+def test_sponsorblock_outage_does_not_block_reading(monkeypatch, tmp_path):
+    cfg, _ = seeded(tmp_path)
+    _flaky_sponsorblock(monkeypatch, [503, 503, 503, 503, 503, 503])
+    page = api.read_transcript(VIDEO, exclude_categories=["sponsor"], cfg=cfg)
+    assert (
+        page["excluded_segments"] == 0
+        and page["complete"]
+        and "SPONSORBLOCK_UNAVAILABLE" in page["warnings"][0]
+    )
+    outline = insights.outline(VIDEO, exclude_categories=["sponsor"], cfg=cfg)
+    assert outline["warnings"] and outline["excluded_segments"] == 0

@@ -25,8 +25,15 @@ async def test_real_timeline_insights(client, evidence):
         assert heatmap["peaks"] and heatmap["peaks"][0]["intensity"] > 0
         assert heatmap["peaks"][0]["transcript"] is not None
 
-    segments = await call(client, evidence, "youtube_sponsor_segments", {"video": video})
-    assert segments["source"] == "sponsorblock" and isinstance(segments["segments"], list)
+    # SponsorBlock is a third-party service; an outage must surface as a retryable error only.
+    result = await client.call_tool("youtube_sponsor_segments", {"video": video}, raise_on_error=False)
+    evidence["calls"].append(
+        {"tool": "youtube_sponsor_segments", "arguments": {"video": video}, "is_error": result.is_error}
+    )
+    if result.is_error:
+        assert "SPONSORBLOCK_UNAVAILABLE" in str(result.content)
+    else:
+        assert result.data["source"] == "sponsorblock" and isinstance(result.data["segments"], list)
     page = await call(
         client,
         evidence,

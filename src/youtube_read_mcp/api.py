@@ -27,7 +27,7 @@ def read_transcript(
     segs = record.get("segments", [])
     if not 0 <= cursor <= len(segs):
         raise ValueError("Invalid transcript cursor")
-    skipped = insights.excluded_indexes(record, exclude_categories, cfg=cfg)
+    skipped, warning = insights.excluded_indexes(record, exclude_categories, cfg=cfg)
     selected: list[dict[str, Any]] = []
     chars = 0
     end = cursor
@@ -62,6 +62,8 @@ def read_transcript(
     result["segments" if format == "segments" else "text"] = (
         selected if format == "segments" else " ".join(x["text"] for x in selected)
     )
+    if warning:
+        result["warnings"] = [warning]
     return result
 
 
@@ -74,11 +76,13 @@ def transcript_range(
     cfg: Settings = settings,
 ) -> dict[str, Any]:
     record = transcript.load_record(video, cfg)
-    skipped = insights.excluded_indexes(record, exclude_categories, cfg=cfg)
+    skipped, warning = insights.excluded_indexes(record, exclude_categories, cfg=cfg)
     if skipped:
         record = {**record, "segments": [s for i, s in enumerate(record["segments"]) if i not in skipped]}
     result = transcript.transcript_range(record, start_seconds, end_seconds)
     result["excluded_segments"] = len(skipped)
+    if warning:
+        result["warnings"] = [warning]
     return result
 
 
